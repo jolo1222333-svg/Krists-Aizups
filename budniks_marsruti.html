@@ -1,0 +1,2247 @@
+<!doctype html>
+<html lang="lv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Maršrutu plānotājs — prāmji + HGV + ETA + share + compare</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    html, body { height: 100%; overflow: hidden; }
+    body { margin: 0; background: #0b1220; color: #e8eefc; }
+
+    .wrap { display: grid; grid-template-columns: 560px 1fr; height: 100vh; }
+    .panel {
+      padding: 16px;
+      border-right: 1px solid rgba(255, 255, 255, .08);
+      background: linear-gradient(180deg, rgba(255, 255, 255, .04), rgba(255, 255, 255, .01));
+      height: 100vh;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    h2 { font-size: 13px; margin: 16px 0 8px; opacity: .92; }
+    label { display: block; font-size: 12px; opacity: .9; margin: 8px 0 6px; }
+
+    input[type="text"], input[type="number"], input[type="datetime-local"], select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, .12);
+      background: rgba(255, 255, 255, .05);
+      color: #e8eefc;
+      outline: none;
+    }
+
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .btns { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+
+    button {
+      border: 1px solid rgba(255, 255, 255, .14);
+      background: rgba(255, 255, 255, .06);
+      color: #e8eefc;
+      padding: 10px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+    button.primary { background: rgba(46, 134, 255, .22); border-color: rgba(46, 134, 255, .35); }
+    button.danger  { background: rgba(255, 90, 90, .18); border-color: rgba(255, 90, 90, .30); }
+    button.ghost   { background: rgba(255, 255, 255, .03); border-color: rgba(255, 255, 255, .10); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+
+    .note { font-size: 12px; opacity: .78; line-height: 1.35; }
+
+    .stops { display: flex; flex-direction: column; gap: 10px; }
+    .stopItem {
+      display: grid;
+      grid-template-columns: 38px 1fr 44px;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid rgba(255, 255, 255, .10);
+      background: rgba(255, 255, 255, .03);
+      border-radius: 14px;
+      padding: 10px;
+    }
+    .handle {
+      user-select: none;
+      cursor: grab;
+      font-size: 18px;
+      opacity: .9;
+      text-align: center;
+      border: 1px solid rgba(255, 255, 255, .10);
+      background: rgba(255, 255, 255, .03);
+      border-radius: 12px;
+      padding: 6px 0;
+    }
+    .handle:active { cursor: grabbing; }
+    .stopMeta { display: flex; flex-direction: column; gap: 6px; }
+    .stopBadge {
+      display: inline-flex;
+      width: fit-content;
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, .14);
+      background: rgba(255, 255, 255, .04);
+      opacity: .95;
+      white-space: nowrap;
+    }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, .12);
+      background: rgba(255, 255, 255, .04);
+      font-size: 12px;
+    }
+    .chip input { margin: 0; }
+
+    #map { height: 100vh; width: 100%; }
+
+    .results { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+    .card {
+      border: 1px solid rgba(255, 255, 255, .10);
+      background: rgba(255, 255, 255, .03);
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .cardHeader { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+    .title { font-weight: 700; font-size: 13px; }
+    .badge {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, .14);
+      background: rgba(255, 255, 255, .04);
+      opacity: .95;
+      white-space: nowrap;
+    }
+    .metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .metric {
+      padding: 8px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .03);
+      border: 1px solid rgba(255, 255, 255, .08);
+    }
+    .metric .k { font-size: 11px; opacity: .75; }
+    .metric .v { font-size: 13px; font-weight: 650; margin-top: 2px; }
+
+    .split { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .small { font-size: 12px; opacity: .82; margin-top: 8px; line-height: 1.35; }
+
+    .warn {
+      margin-top: 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 90, 90, .28);
+      background: rgba(255, 90, 90, .10);
+      font-size: 12px;
+      opacity: .98;
+      line-height: 1.35;
+    }
+    .warnY {
+      margin-top: 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 220, 90, .25);
+      background: rgba(255, 220, 90, .08);
+      font-size: 12px;
+      opacity: .95;
+      line-height: 1.35;
+    }
+
+    .highlightCheap { border-color: rgba(90, 255, 170, .35); }
+    .highlightFast  { border-color: rgba(255, 220, 90, .35); }
+    .highlightShort { border-color: rgba(90, 170, 255, .35); }
+
+    .compareBox {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, .10);
+      background: rgba(255, 255, 255, .03);
+    }
+    .compareTable { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+    .compareTable th, .compareTable td {
+      border-bottom: 1px solid rgba(255, 255, 255, .10);
+      padding: 6px 4px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .compareTable th { opacity: .85; font-weight: 700; }
+
+    .debugBox {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, .10);
+      background: rgba(255, 255, 255, .02);
+    }
+    .debugHeader { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .debugPre {
+      margin: 10px 0 0;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, .08);
+      background: rgba(0, 0, 0, .18);
+      color: #dbe6ff;
+      font-size: 11px;
+      line-height: 1.35;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 340px;
+      overflow: auto;
+    }
+
+    .footer { margin-top: 14px; opacity: .7; font-size: 11px; line-height: 1.35; }
+    a { color: #9cc3ff; }
+
+    .portIcon{
+      width:22px; height:22px; border-radius:999px;
+      display:flex; align-items:center; justify-content:center;
+      background: rgba(46, 134, 255, .85);
+      border: 1px solid rgba(255, 255, 255, .75);
+      color: #ffffff;
+      font-size: 14px;
+      line-height: 1;
+      box-shadow: 0 2px 10px rgba(0,0,0,.35);
+    }
+
+  
+    /* Custom div icons */
+    .leaflet-div-icon { background: transparent; border: none; }
+    .pin {
+      width: 28px; height: 28px;
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 12px;
+      color: #ffffff;
+      border: 2px solid rgba(255,255,255,.9);
+      box-shadow: 0 6px 16px rgba(0,0,0,.35);
+      background: #e53935; /* red */
+    }
+    .pin.port { background: #1f2937; border-color: rgba(255,255,255,.65); font-size: 14px; }
+    .tri {
+      width: 0; height: 0;
+      border-left: 14px solid transparent;
+      border-right: 14px solid transparent;
+      border-bottom: 26px solid #fbbf24; /* amber/yellow */
+      position: relative;
+      filter: drop-shadow(0 6px 14px rgba(0,0,0,.35));
+    }
+    .tri::after {
+      content: "!";
+      position: absolute;
+      left: -4px;
+      top: 6px;
+      font-weight: 900;
+      font-size: 16px;
+      color: #111827;
+    }
+    .mapLegend {
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(11,18,32,.85);
+      color: #e8eefc;
+      font-size: 12px;
+      line-height: 1.35;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 10px 24px rgba(0,0,0,.30);
+    }
+    .mapLegend .rowL { display:flex; align-items:center; gap:10px; margin:6px 0; }
+    .legendLine { width: 34px; height: 0; border-top: 4px solid rgba(255,255,255,.90); border-radius: 6px; }
+    .legendFerry { border-top-style: dashed; opacity: .85; }
+    .legendRoad { opacity: .95; }
+
+  </style>
+</head>
+
+<body>
+<div class="wrap">
+  <div class="panel">
+    <div class="row">
+      <div>
+        <h1 id="appTitle">Maršrutu plānotājs</h1>
+        <div class="note" id="appSubtitle">Prāmji tiek modelēti (tīkls + taisnās līnijas). Ceļi: OSRM. Ģeokodēšana: OSM Nominatim.</div>
+      </div>
+      <div>
+        <label id="langLabel">Valoda</label>
+        <select id="lang">
+          <option value="lv" selected>Latviešu</option>
+          <option value="en">English</option>
+          <option value="ru">Русский</option>
+        </select>
+      </div>
+    </div>
+
+    <h2 data-i18n="shareTitle">Kopīgošana / ievade no kartes</h2>
+    <div class="btns">
+      <button class="ghost" id="shareBtn" data-i18n="shareBtn">Share link</button>
+      <button class="ghost" id="pinStartBtn" data-i18n="pinStart">Pin start</button>
+      <button class="ghost" id="pinEndBtn" data-i18n="pinEnd">Pin end</button>
+      <button class="ghost" id="pinStopBtn" data-i18n="pinStop">Pin stop</button>
+      <button class="ghost" id="pinOffBtn" data-i18n="pinOff">Pin OFF</button>
+    </div>
+    <div class="note" id="pinHint" style="margin-top:8px;"></div>
+
+    <label id="startLabel">Starta vieta</label>
+    <input id="start" type="text" placeholder="piem., Rīga vai 56.95,24.10" />
+
+    <label id="endLabel">Galamērķis</label>
+    <input id="end" type="text" placeholder="piem., Oslo vai 59.91,10.75" />
+
+    <h2 id="stopsTitle">Pieturas (drag & drop secībā)</h2>
+    <div class="stops" id="stops"></div>
+
+    <div class="btns">
+      <button id="addStop">+ Pievienot pieturu</button>
+      <button class="primary" id="calc">Aprēķināt</button>
+      <button class="danger" id="clear">Notīrīt karti</button>
+    </div>
+
+    <h2 id="modesTitle">Maršrutu veidi</h2>
+    <div class="chips" id="modes">
+      <label class="chip"><input type="checkbox" data-mode="LAND_ONLY" checked /> <span data-i18n="mode_land">Tikai pa sauszemi (auto)</span></label>
+      <label class="chip"><input type="checkbox" data-mode="LAND_FERRY" checked /> <span data-i18n="mode_ferry">Sauszeme + prāmis</span></label>
+    </div>
+
+    <h2 id="paramsTitle">Parametri</h2>
+    <div class="row">
+      <div>
+        <label data-i18n="fuelCost">Degviela (€/km)</label>
+        <input id="fuelCost" type="number" step="0.01" value="0.12" />
+      </div>
+      <div>
+        <label data-i18n="maxDetour">maxPortDetourKm</label>
+        <input id="maxPortDetourKm" type="number" step="10" value="250" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label data-i18n="ferryCost">Prāmis (€/km)</label>
+        <input id="ferryCost" type="number" step="0.01" value="0.20" />
+      </div>
+      <div>
+        <label data-i18n="ferrySpeed">Prāmis ātrums (km/h)</label>
+        <input id="ferrySpeed" type="number" step="1" value="35" />
+      </div>
+    </div>
+
+    <h2 data-i18n="ferryTuningTitle">Prāmju loģika</h2>
+    <div class="chips">
+      <label class="chip">
+        <input type="checkbox" id="ferryRealism" checked />
+        <span data-i18n="ferryRealism">“Realistic ferry mode” (HGV)</span>
+      </label>
+      <label class="chip">
+        <input type="checkbox" id="showDebug" />
+        <span data-i18n="showDebug">Rādīt Debug paneli</span>
+      </label>
+    </div>
+    <div class="note" data-i18n="ferryTuningHint">
+      Realistic režīms: max 2 prāmji, bonuss tiešajam prāmim, sodi par pārsēšanos, priekšroka “mājas” ostām.
+    </div>
+
+    <h2 data-i18n="etaTitle">Start time / ETA (ar atpūtu)</h2>
+    <div class="row">
+      <div>
+        <label data-i18n="startTime">Start time</label>
+        <input id="startTime" type="datetime-local" />
+      </div>
+      <div>
+        <label data-i18n="dailyRest">Daily rest (h)</label>
+        <input id="dailyRestH" type="number" step="0.5" value="11" />
+      </div>
+    </div>
+
+    <h2 id="driversTitle">Vadīšanas laika noteikumi (iekļauti)</h2>
+    <div class="row">
+      <div>
+        <label data-i18n="breakAfter">Pauze pēc (h)</label>
+        <input id="breakAfterH" type="number" step="0.5" value="4.5" />
+      </div>
+      <div>
+        <label data-i18n="breakLen">Pauzes ilgums (min)</label>
+        <input id="breakLenMin" type="number" step="5" value="45" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label data-i18n="dailyMax">Dienas maks. vadīšana (h)</label>
+        <input id="dailyMaxH" type="number" step="0.5" value="9" />
+      </div>
+      <div>
+        <label data-i18n="dailyMaxExt">Dienas maks. (izņēmums) (h)</label>
+        <input id="dailyMaxExtH" type="number" step="0.5" value="10" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label data-i18n="weeklyMax">Nedēļas maks. vadīšana (h)</label>
+        <input id="weeklyMaxH" type="number" step="1" value="56" />
+      </div>
+      <div>
+        <label data-i18n="fortnightMax">2 nedēļu maks. vadīšana (h)</label>
+        <input id="fortnightMaxH" type="number" step="1" value="90" />
+      </div>
+    </div>
+
+    <h2 data-i18n="hgvTitle">HGV ierobežojumi (brīdinājumi + “aizliegtās zonas” kartē)</h2>
+    <div class="row">
+      <div>
+        <label data-i18n="truckHeight">Augstums (m)</label>
+        <input id="truckHeightM" type="number" step="0.01" value="4.00" />
+      </div>
+      <div>
+        <label data-i18n="truckWeight">Svars (t)</label>
+        <input id="truckWeightT" type="number" step="0.1" value="40.0" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label data-i18n="truckLength">Garums (m)</label>
+        <input id="truckLengthM" type="number" step="0.1" value="16.5" />
+      </div>
+      <div>
+        <label data-i18n="truckWidth">Platums (m)</label>
+        <input id="truckWidthM" type="number" step="0.01" value="2.55" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label data-i18n="truckADR">ADR</label>
+        <select id="truckADR">
+          <option value="no" selected data-i18n="adrNo">Nē</option>
+          <option value="yes" data-i18n="adrYes">Jā</option>
+        </select>
+      </div>
+      <div>
+        <label data-i18n="truckEuro">Euro klase</label>
+        <select id="truckEuro">
+          <option value="0">Euro 0</option>
+          <option value="1">Euro 1</option>
+          <option value="2">Euro 2</option>
+          <option value="3">Euro 3</option>
+          <option value="4">Euro 4</option>
+          <option value="5">Euro 5</option>
+          <option value="6" selected>Euro 6</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="chips" style="margin-top:10px;">
+      <label class="chip"><input type="checkbox" id="showRestrictions" checked /> <span data-i18n="showRestrictions">Rādīt aizliegtās zonas kartē</span></label>
+    </div>
+
+    <div class="chips" style="margin-top:10px;">
+      <label class="chip"><input type="checkbox" id="showPorts" checked /> <span data-i18n="showPorts">Rādīt ostas</span></label>
+    </div>
+
+    <p class="note" id="status">Ievadi vietas, sakārto pieturas un spied “Aprēķināt”.</p>
+
+    <div class="compareBox" id="compareBox" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <div style="font-weight:700; font-size:12px;" data-i18n="compareTitle">Salīdzinājums</div>
+        <button class="ghost" id="clearCompareBtn" data-i18n="clearCompare">Notīrīt salīdzinājumu</button>
+      </div>
+      <div id="compareTableWrap"></div>
+    </div>
+
+    <div class="debugBox" id="debugBox" style="display:none;">
+      <div class="debugHeader">
+        <div style="font-weight:700; font-size:12px;" id="debugTitle">Debug</div>
+        <div class="btns" style="margin:0;">
+          <button class="ghost" id="debugCopyBtn" data-i18n="debugCopy">Kopēt debug</button>
+          <button class="ghost" id="debugHideBtn" data-i18n="debugHide">Paslēpt</button>
+        </div>
+      </div>
+      <div class="note" id="debugHint" data-i18n="debugHint">
+        Debug parādās, kad izvēlies rezultātu un spied “Debug”.
+      </div>
+      <div class="debugPre" id="debugText"></div>
+    </div>
+
+    <h2 id="resultsTitle">Rezultāti (visi)</h2>
+    <div class="results" id="results"></div>
+
+    <div class="footer" id="footerText">
+      Piezīme: prāmji/ierobežojumi šeit ir modelēti. Reālās cenas/grafiki/noteikumi var atšķirties.
+    </div>
+  </div>
+
+  <div id="map"></div>
+</div>
+
+<script>
+/** =============================
+ *  I18N
+ *  ============================= */
+const I18N = {
+  lv: {
+    appTitle: "Maršrutu plānotājs",
+    appSubtitle: "Prāmji tiek modelēti (tīkls + taisnās līnijas). Ceļi: OSRM. Ģeokodēšana: OSM Nominatim.",
+    langLabel: "Valoda",
+    startLabel: "Starta vieta",
+    endLabel: "Galamērķis",
+    stopsTitle: "Pieturas (drag & drop secībā)",
+    addStop: "+ Pievienot pieturu",
+    calc: "Aprēķināt",
+    clear: "Notīrīt karti",
+    modesTitle: "Maršrutu veidi",
+    mode_land: "Tikai pa sauszemi (auto)",
+    mode_ferry: "Sauszeme + prāmis",
+    paramsTitle: "Parametri",
+    fuelCost: "Degviela (€/km)",
+    maxDetour: "maxPortDetourKm",
+    ferryCost: "Prāmis (€/km)",
+    ferrySpeed: "Prāmis ātrums (km/h)",
+    ferryTuningTitle: "Prāmju loģika",
+    ferryRealism: "“Realistic ferry mode” (HGV)",
+    showDebug: "Rādīt Debug paneli",
+    ferryTuningHint: "Realistic režīms: max 2 prāmji, bonuss tiešajam prāmim, sodi par pārsēšanos, priekšroka “mājas” ostām.",
+    driversTitle: "Vadīšanas laika noteikumi (iekļauti)",
+    breakAfter: "Pauze pēc (h)",
+    breakLen: "Pauzes ilgums (min)",
+    dailyMax: "Dienas maks. vadīšana (h)",
+    dailyMaxExt: "Dienas maks. (izņēmums) (h)",
+    weeklyMax: "Nedēļas maks. vadīšana (h)",
+    fortnightMax: "2 nedēļu maks. vadīšana (h)",
+    statusReady: "Gatavs. Izvēlies rezultātu un spied “Rādīt kartē”.",
+    statusGeocode: "Ģeokodēju vietas…",
+    statusCompute: "Aprēķinu maršrutus…",
+    statusNoModes: "Izvēlies vismaz vienu maršruta veidu.",
+    statusNeedStartEnd: "Lūdzu ievadi startu un galamērķi.",
+    resultsTitle: "Rezultāti (visi)",
+    showOnMap: "Rādīt kartē",
+    showDebugBtn: "Debug",
+    cheapest: "Lētākais",
+    fastest: "Ātrākais",
+    shortest: "Īsākais",
+    price: "Cena",
+    time: "Laiks",
+    dist: "Attālums",
+    landSplit: "Sauszeme",
+    seaSplit: "Jūra",
+    noteLand: "Ceļu maršruts (OSRM). Laiks koriģēts ar pauzēm + dienas atpūtu.",
+    noteFerry: "Prāmji modelēti ar ostu tīklu (Dijkstra) + jūras attālums pa taisni.",
+    unloadN: (n) => `${n}. izkraušanās`,
+    deleteStop: "Dzēst pieturu",
+    footerText: "Piezīme: prāmji/ierobežojumi šeit ir modelēti. Reālās cenas/grafiki/noteikumi var atšķirties.",
+    warnings: "Brīdinājumi",
+    wDaily: "Pārsniedz dienas vadīšanas limitu (tiek pieskaitīta dienas atpūta).",
+    wWeekly: "Pārsniedz nedēļas vadīšanas limitu (brīdinājums).",
+    wFortnight: "Pārsniedz 2 nedēļu vadīšanas limitu (brīdinājums).",
+    etaTitle: "Izbraukšanas laiks / ETA (ar atpūtu)",
+    startTime: "Izbraukšanas laiks",
+    dailyRest: "Atpūta (h)",
+    etaLabel: "ETA",
+    compareTitle: "Salīdzinājums",
+    clearCompare: "Notīrīt salīdzinājumu",
+    comparePick: "Atzīmē salīdzināšanai",
+    shareTitle: "Kopīgošana / ievade no kartes",
+    shareBtn: "Share link",
+    pinStart: "Pin start",
+    pinEnd: "Pin end",
+    pinStop: "Pin stop",
+    pinOff: "Pin OFF",
+    pinHintOff: "Pin režīms izslēgts.",
+    pinHintStart: "Klikšķini kartē, lai iestatītu START (ievadīs koordinātas).",
+    pinHintEnd: "Klikšķini kartē, lai iestatītu GALAMĒRĶI (ievadīs koordinātas).",
+    pinHintStop: "Klikšķini kartē, lai pievienotu PIETURU (ievadīs koordinātas).",
+    copied: "Nokopēts!",
+    showRestrictions: "Rādīt aizliegtās zonas kartē",
+    hgvTitle: "HGV ierobežojumi (brīdinājumi + “aizliegtās zonas” kartē)",
+    truckHeight: "Augstums (m)",
+    truckWeight: "Svars (t)",
+    truckLength: "Garums (m)",
+    truckWidth: "Platums (m)",
+    truckADR: "ADR",
+    truckEuro: "Euro klase",
+    restrictionsHitTitle: "Ierobežojumi uz maršruta",
+    restTitle: "Atpūta",
+    startAt: "Starts",
+    arriveAt: "Ierašanās",
+    debugCopy: "Kopēt debug",
+    debugHide: "Paslēpt",
+    debugHint: "Debug parādās, kad izvēlies rezultātu un spied “Debug”.",
+    adrNo: "Nē",
+    adrYes: "Jā",
+    showPorts: "Rādīt ostas",
+  },
+  en: {
+    appTitle: "Route planner",
+    appSubtitle: "Ferries are modeled (network + straight-line sea distance). Roads: OSRM. Geocoding: OSM Nominatim.",
+    langLabel: "Language",
+    startLabel: "Start",
+    endLabel: "Destination",
+    stopsTitle: "Stops (drag & drop order)",
+    addStop: "+ Add stop",
+    calc: "Calculate",
+    clear: "Clear map",
+    modesTitle: "Route types",
+    mode_land: "Land only (road)",
+    mode_ferry: "Land + ferry",
+    paramsTitle: "Parameters",
+    fuelCost: "Fuel (€/km)",
+    maxDetour: "maxPortDetourKm",
+    ferryCost: "Ferry (€/km)",
+    ferrySpeed: "Ferry speed (km/h)",
+    ferryTuningTitle: "Ferry logic",
+    ferryRealism: "“Realistic ferry mode” (HGV)",
+    showDebug: "Show debug panel",
+    ferryTuningHint: "Realistic mode: max 2 ferries, bonus for direct ferry, transfer penalties, preference for “home” ports.",
+    driversTitle: "Driving-time rules (included)",
+    breakAfter: "Break after (h)",
+    breakLen: "Break length (min)",
+    dailyMax: "Daily max driving (h)",
+    dailyMaxExt: "Daily max (exception) (h)",
+    weeklyMax: "Weekly max driving (h)",
+    fortnightMax: "Fortnight max driving (h)",
+    statusReady: "Done. Pick a result and click “Show on map”.",
+    statusGeocode: "Geocoding…",
+    statusCompute: "Computing routes…",
+    statusNoModes: "Select at least one route type.",
+    statusNeedStartEnd: "Please enter start and destination.",
+    resultsTitle: "Results (all)",
+    showOnMap: "Show on map",
+    showDebugBtn: "Debug",
+    cheapest: "Cheapest",
+    fastest: "Fastest",
+    shortest: "Shortest",
+    price: "Price",
+    time: "Time",
+    dist: "Distance",
+    landSplit: "Land",
+    seaSplit: "Sea",
+    noteLand: "Road route (OSRM). Time adjusted with breaks + daily rest.",
+    noteFerry: "Ferries modeled using a port graph (Dijkstra) + straight-line sea distance.",
+    unloadN: (n) => `Stop ${n}`,
+    deleteStop: "Delete stop",
+    footerText: "Note: ferries/restrictions are modeled. Real prices/schedules/rules may differ.",
+    warnings: "Warnings",
+    wDaily: "Exceeds daily driving limit (daily rest is added).",
+    wWeekly: "Exceeds weekly driving limit (warning).",
+    wFortnight: "Exceeds fortnight driving limit (warning).",
+    etaTitle: "Start time / ETA (with rest)",
+    startTime: "Start time",
+    dailyRest: "Daily rest (h)",
+    etaLabel: "ETA",
+    compareTitle: "Comparison",
+    clearCompare: "Clear comparison",
+    comparePick: "Select to compare",
+    shareTitle: "Share / pin from map",
+    shareBtn: "Share link",
+    pinStart: "Pin start",
+    pinEnd: "Pin end",
+    pinStop: "Pin stop",
+    pinOff: "Pin OFF",
+    pinHintOff: "Pin mode is OFF.",
+    pinHintStart: "Click the map to set START (fills coordinates).",
+    pinHintEnd: "Click the map to set DESTINATION (fills coordinates).",
+    pinHintStop: "Click the map to add a STOP (fills coordinates).",
+    copied: "Copied!",
+    showRestrictions: "Show restricted zones on map",
+    hgvTitle: "HGV constraints (warnings + “restricted zones” on map)",
+    truckHeight: "Height (m)",
+    truckWeight: "Weight (t)",
+    truckLength: "Length (m)",
+    truckWidth: "Width (m)",
+    truckADR: "ADR",
+    truckEuro: "Euro class",
+    restrictionsHitTitle: "Constraints on route",
+    restTitle: "Rest",
+    startAt: "Start",
+    arriveAt: "Arrive",
+    debugCopy: "Copy debug",
+    debugHide: "Hide",
+    debugHint: "Debug appears after selecting a result and clicking “Debug”.",
+    adrNo: "No",
+    adrYes: "Yes",
+    showPorts: "Show ports",
+  },
+  ru: {
+    appTitle: "Планировщик маршрутов",
+    appSubtitle: "Паромы моделируются (сеть + расстояние по морю по прямой). Дороги: OSRM. Геокодинг: OSM Nominatim.",
+    langLabel: "Язык",
+    startLabel: "Старт",
+    endLabel: "Назначение",
+    stopsTitle: "Остановки (перетаскивание порядка)",
+    addStop: "+ Добавить остановку",
+    calc: "Рассчитать",
+    clear: "Очистить карту",
+    modesTitle: "Типы маршрута",
+    mode_land: "Только суша (дорога)",
+    mode_ferry: "Суша + паром",
+    paramsTitle: "Параметры",
+    fuelCost: "Топливо (€/км)",
+    maxDetour: "maxPortDetourKm",
+    ferryCost: "Паром (€/км)",
+    ferrySpeed: "Скорость парома (км/ч)",
+    ferryTuningTitle: "Логика паромов",
+    ferryRealism: "“Realistic ferry mode” (HGV)",
+    showDebug: "Показать debug панель",
+    ferryTuningHint: "Realistic режим: максимум 2 парома, бонус за прямой паром, штрафы за пересадки, приоритет “домашних” портов.",
+    driversTitle: "Правила времени вождения (учтены)",
+    breakAfter: "Перерыв после (ч)",
+    breakLen: "Длительность перерыва (мин)",
+    dailyMax: "Сутки: макс. вождение (ч)",
+    dailyMaxExt: "Сутки: исключение (ч)",
+    weeklyMax: "Неделя: макс. вождение (ч)",
+    fortnightMax: "2 недели: макс. вождение (ч)",
+    statusReady: "Готово. Выберите вариант и нажмите “Показать на карте”.",
+    statusGeocode: "Геокодирование…",
+    statusCompute: "Расчёт маршрутов…",
+    statusNoModes: "Выберите хотя бы один тип маршрута.",
+    statusNeedStartEnd: "Введите старт и назначение.",
+    resultsTitle: "Результаты (все)",
+    showOnMap: "Показать на карте",
+    showDebugBtn: "Debug",
+    cheapest: "Дешевле",
+    fastest: "Быстрее",
+    shortest: "Короче",
+    price: "Цена",
+    time: "Время",
+    dist: "Дистанция",
+    landSplit: "Суша",
+    seaSplit: "Море",
+    noteLand: "Дорожный маршрут (OSRM). Время с учётом перерывов и суточного отдыха.",
+    noteFerry: "Паромы моделируются через граф портов (Dijkstra) + расстояние по морю по прямой.",
+    unloadN: (n) => `${n}-я выгрузка`,
+    deleteStop: "Удалить",
+    footerText: "Примечание: паромы/ограничения моделируются. Реальные цены/расписания/правила могут отличаться.",
+    warnings: "Предупреждения",
+    wDaily: "Превышен дневной лимит вождения (добавляется суточный отдых).",
+    wWeekly: "Превышен недельный лимит (предупреждение).",
+    wFortnight: "Превышен лимит за 2 недели (предупреждение).",
+    etaTitle: "Start time / ETA (с отдыхом)",
+    startTime: "Start time",
+    dailyRest: "Суточный отдых (ч)",
+    etaLabel: "ETA",
+    compareTitle: "Сравнение",
+    clearCompare: "Очистить сравнение",
+    comparePick: "Выбрать для сравнения",
+    shareTitle: "Поделиться / pin с карты",
+    shareBtn: "Share link",
+    pinStart: "Pin старт",
+    pinEnd: "Pin финиш",
+    pinStop: "Pin остановка",
+    pinOff: "Pin OFF",
+    pinHintOff: "Pin режим выключен.",
+    pinHintStart: "Клик по карте — установить СТАРТ (вставит координаты).",
+    pinHintEnd: "Клик по карте — установить НАЗНАЧЕНИЕ (вставит координаты).",
+    pinHintStop: "Клик по карте — добавить ОСТАНОВКУ (вставит координаты).",
+    copied: "Скопировано!",
+    showRestrictions: "Показывать зоны ограничений на карте",
+    hgvTitle: "Ограничения HGV (предупреждения + зоны на карте)",
+    truckHeight: "Высота (м)",
+    truckWeight: "Вес (т)",
+    truckLength: "Длина (м)",
+    truckWidth: "Ширина (м)",
+    truckADR: "ADR",
+    truckEuro: "Euro класс",
+    restrictionsHitTitle: "Ограничения на маршруте",
+    restTitle: "Отдых",
+    startAt: "Старт",
+    arriveAt: "Прибытие",
+    debugCopy: "Копировать debug",
+    debugHide: "Скрыть",
+    debugHint: "Debug появится после выбора результата и нажатия “Debug”.",
+    adrNo: "Нет",
+    adrYes: "Да",
+    showPorts: "Показывать порты",
+  }
+};
+
+let LANG = "lv";
+function t(key, ...args) {
+  const v = I18N[LANG][key];
+  return (typeof v === "function") ? v(...args) : v;
+}
+function applyI18n() {
+  document.getElementById("appTitle").textContent = t("appTitle");
+  document.getElementById("appSubtitle").textContent = t("appSubtitle");
+  document.getElementById("langLabel").textContent = t("langLabel");
+  document.getElementById("startLabel").textContent = t("startLabel");
+  document.getElementById("endLabel").textContent = t("endLabel");
+  document.getElementById("stopsTitle").textContent = t("stopsTitle");
+  document.getElementById("addStop").textContent = t("addStop");
+  document.getElementById("calc").textContent = t("calc");
+  document.getElementById("clear").textContent = t("clear");
+  document.getElementById("modesTitle").textContent = t("modesTitle");
+  document.getElementById("paramsTitle").textContent = t("paramsTitle");
+  document.getElementById("driversTitle").textContent = t("driversTitle");
+  document.getElementById("resultsTitle").textContent = t("resultsTitle");
+  document.getElementById("footerText").textContent = t("footerText");
+  for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
+  updatePinHint();
+  refreshStopBadges();
+}
+
+/** =============================
+ * Helpers
+ * ============================= */
+function fmtKm(x) { return `${Math.round(x)} km`; }
+function fmtEur(x) { return `${(Number.isFinite(x) ? x : 0).toFixed(2)} €`; }
+function fmtHrs(hours) {
+  const mins = Math.round((Number.isFinite(hours) ? hours : 0) * 60);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${h}h ${m}m`;
+}
+function fmtDateTimeLocal(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function fmtHumanDate(d) {
+  try { return d.toLocaleString(undefined, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); }
+  catch { return d.toString(); }
+}
+function haversineKm(a, b) {
+  const R = 6371;
+  const toRad = (d) => d * Math.PI / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function setStatus(msg) { document.getElementById("status").textContent = msg; }
+function readNum(id, fallback) {
+  const raw = (document.getElementById(id)?.value ?? "").toString().trim().replace(",", ".");
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+function safeStr(s) { return (s ?? "").toString(); }
+function parseCoordText(txt) {
+  const m = safeStr(txt).trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  if (!m) return null;
+  const lat = Number(m[1]), lon = Number(m[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  return { lat, lon };
+}
+
+/** =============================
+ * Country group (simplified)
+ * ============================= */
+const GROUPS = {
+  uk: new Set(["gb", "uk"]),
+  ireland: new Set(["ie"]),
+  iceland: new Set(["is"]),
+};
+function countryToGroup(cc) {
+  if (!cc) return "mainland_eu";
+  cc = cc.toLowerCase();
+  if (GROUPS.uk.has(cc)) return "uk";
+  if (GROUPS.ireland.has(cc)) return "ireland";
+  if (GROUPS.iceland.has(cc)) return "iceland";
+  return "mainland_eu";
+}
+
+/** =============================
+ * Map (Europe only)
+ * ============================= */
+const EUROPE_BOUNDS = L.latLngBounds(L.latLng(34.0, -25.0), L.latLng(72.0, 45.0));
+const map = L.map("map", {
+  zoomControl: true,
+  scrollWheelZoom: true,
+  maxBounds: EUROPE_BOUNDS,
+  maxBoundsViscosity: 1.0,
+  minZoom: 4,
+  maxZoom: 19
+}).setView([54.8, 15.5], 5);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: "&copy; OpenStreetMap"
+}).addTo(map);
+
+// Ports layer (separate from route drawings)
+const PORT_LAYER = L.layerGroup().addTo(map);
+
+// Legend
+const legend = L.control({ position: "bottomright" });
+legend.onAdd = function() {
+  const div = L.DomUtil.create("div", "mapLegend");
+  div.innerHTML = `
+    <div style="font-weight:800; margin-bottom:6px;">Legend</div>
+    <div class="rowL"><div class="pin" style="transform:scale(.9);">S</div><div>Start / End / Stops</div></div>
+    <div class="rowL"><div class="tri" style="transform:scale(.9);"></div><div>Restricted zone</div></div>
+    <div class="rowL"><div class="pin port" style="transform:scale(.9);">⚓</div><div>Port</div></div>
+    <div class="rowL"><div class="legendLine legendRoad"></div><div>Road</div></div>
+    <div class="rowL"><div class="legendLine legendFerry"></div><div>Ferry</div></div>
+  `;
+  L.DomEvent.disableClickPropagation(div);
+  L.DomEvent.disableScrollPropagation(div);
+  return div;
+};
+legend.addTo(map);
+
+
+let drawnLayers = [];
+let restrictionLayers = [];
+function clearMap() { for (const l of drawnLayers) map.removeLayer(l); drawnLayers = []; }
+function clearRestrictions() { for (const l of restrictionLayers) map.removeLayer(l); restrictionLayers = []; }
+
+function drawGeoJsonLine(geojson, opts = {}) {
+  const layer = L.geoJSON(geojson, { style: opts }).addTo(map);
+  drawnLayers.push(layer);
+  return layer;
+}
+function drawStraightLine(a, b, opts = {}) {
+  const layer = L.polyline([[a.lat, a.lon], [b.lat, b.lon]], opts).addTo(map);
+  drawnLayers.push(layer);
+  return layer;
+}
+
+function makeDivIcon(html, w, h, anchorX, anchorY) {
+  return L.divIcon({
+    className: "",
+    html,
+    iconSize: [w, h],
+    iconAnchor: [anchorX, anchorY],
+    popupAnchor: [0, -anchorY + 4]
+  });
+}
+
+function drawWaypointMarker(p, role = "stop", n = null, popupHtml = "") {
+  // role: "start" | "end" | "stop"
+  let label = "";
+  if (role === "start") label = "S";
+  else if (role === "end") label = "E";
+  else label = (n != null ? String(n) : "");
+  const icon = makeDivIcon(`<div class="pin">${label}</div>`, 28, 28, 14, 28);
+  const m = L.marker([p.lat, p.lon], { icon }).addTo(map);
+  if (popupHtml) m.bindPopup(popupHtml);
+  drawnLayers.push(m);
+  return m;
+}
+
+function drawPortMarker(port) {
+  const icon = makeDivIcon(`<div class="pin port">⚓</div>`, 28, 28, 14, 28);
+  const m = L.marker([port.lat, port.lon], { icon }).addTo(PORT_LAYER)
+    .bindPopup(`<b>${port.name}</b><br/>Port: ${port.id}`);
+  return m;
+}
+
+function drawRestrictionTriangle(p, popupHtml = "", intoRestrictions = true) {
+  const icon = makeDivIcon(`<div class="tri"></div>`, 28, 26, 14, 26);
+  const m = L.marker([p.lat, p.lon], { icon }).addTo(map);
+  if (popupHtml) m.bindPopup(popupHtml);
+  (intoRestrictions ? restrictionLayers : drawnLayers).push(m);
+  return m;
+}
+
+// Backwards-compatible generic marker (red pin)
+function drawMarker(p, text, intoRestrictions = false) {
+  const icon = makeDivIcon(`<div class="pin">•</div>`, 28, 28, 14, 28);
+  const m = L.marker([p.lat, p.lon], { icon }).addTo(map).bindPopup(text);
+  (intoRestrictions ? restrictionLayers : drawnLayers).push(m);
+  return m;
+}
+
+function drawCircle(p, radiusKm, opts = {}, intoRestrictions = true) {
+  const c = L.circle([p.lat, p.lon], { radius: radiusKm * 1000, ...opts }).addTo(map);
+  (intoRestrictions ? restrictionLayers : drawnLayers).push(c);
+  return c;
+}
+
+/** =============================
+ * Pin-to-map mode
+ * ============================= */
+let PIN_MODE = "OFF";
+function updatePinHint() {
+  const el = document.getElementById("pinHint");
+  if (!el) return;
+  if (PIN_MODE === "START") el.textContent = t("pinHintStart");
+  else if (PIN_MODE === "END") el.textContent = t("pinHintEnd");
+  else if (PIN_MODE === "STOP") el.textContent = t("pinHintStop");
+  else el.textContent = t("pinHintOff");
+}
+document.getElementById("pinStartBtn").onclick = () => { PIN_MODE = "START"; updatePinHint(); };
+document.getElementById("pinEndBtn").onclick = () => { PIN_MODE = "END"; updatePinHint(); };
+document.getElementById("pinStopBtn").onclick = () => { PIN_MODE = "STOP"; updatePinHint(); };
+document.getElementById("pinOffBtn").onclick = () => { PIN_MODE = "OFF"; updatePinHint(); };
+
+map.on("click", (e) => {
+  if (PIN_MODE === "OFF") return;
+  const lat = Number(e.latlng.lat.toFixed(5));
+  const lon = Number(e.latlng.lng.toFixed(5));
+  const txt = `${lat},${lon}`;
+  if (PIN_MODE === "START") document.getElementById("start").value = txt;
+  if (PIN_MODE === "END") document.getElementById("end").value = txt;
+  if (PIN_MODE === "STOP") addStop(txt);
+});
+
+/** =============================
+ * Geocoding / OSRM
+ * ============================= */
+async function geocode(q) {
+  const asCoord = parseCoordText(q);
+  if (asCoord) return { ...asCoord, label: q, countryCode: "", group: "mainland_eu" };
+
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1&q=${encodeURIComponent(q)}`;
+  const res = await fetch(url, { headers: { "Accept": "application/json" } });
+  if (!res.ok) throw new Error(`Geocode failed: ${res.status}`);
+  const data = await res.json();
+  if (!data?.length) throw new Error(`Not found: "${q}"`);
+  const cc = (data[0]?.address?.country_code ?? "").toLowerCase();
+  return {
+    lat: parseFloat(data[0].lat),
+    lon: parseFloat(data[0].lon),
+    label: data[0].display_name,
+    countryCode: cc,
+    group: countryToGroup(cc)
+  };
+}
+async function osrmRoute(points) {
+  const coords = points.map(p => `${p.lon},${p.lat}`).join(";");
+  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
+  const res = await fetch(url, { headers: { "Accept": "application/json" } });
+  if (!res.ok) throw new Error(`OSRM failed: ${res.status}`);
+  const data = await res.json();
+  if (data.code !== "Ok" || !data.routes?.length) throw new Error("OSRM no route");
+  const r = data.routes[0];
+  return { distanceKm: r.distance / 1000, durationHrs: r.duration / 3600, geojson: r.geometry };
+}
+
+/** =============================
+ * Driving-time + ETA
+ * ============================= */
+function drivingAdjustment(rawDrivingH, rules) {
+  const breakAfterH = rules.breakAfterH;
+  const breakLenH = rules.breakLenMin / 60;
+  const eps = 1e-9;
+  const breaksCount = Math.floor((rawDrivingH - eps) / breakAfterH);
+  const breaksH = breaksCount * breakLenH;
+
+  const warnings = [];
+  if (rawDrivingH > rules.dailyMaxH) warnings.push("daily");
+  if (rawDrivingH > rules.weeklyMaxH) warnings.push("weekly");
+  if (rawDrivingH > rules.fortnightMaxH) warnings.push("fortnight");
+
+  const minDays = Math.max(1, Math.ceil(rawDrivingH / rules.dailyMaxH));
+  return { breaksCount, breaksH, warnings, minDays };
+}
+
+function computeEtaWithDailyRest(rawDriveH, breaksH, seaH, rules, dailyRestH, startDate) {
+  const dailyMax = rules.dailyMaxH;
+  const days = Math.floor(rawDriveH / dailyMax);
+  const restsCount = Math.max(0, days);
+  const restsH = restsCount * dailyRestH;
+  const totalH = rawDriveH + breaksH + restsH + seaH;
+
+  const start = startDate ? new Date(startDate) : null;
+  const arrive = start ? new Date(start.getTime() + totalH * 3600 * 1000) : null;
+
+  return { totalH, restsCount, restsH, start, arrive };
+}
+
+/** =============================
+ * Stops drag & drop
+ * ============================= */
+const stopsDiv = document.getElementById("stops");
+let dragEl = null;
+
+function refreshStopBadges() {
+  const items = Array.from(stopsDiv.querySelectorAll(".stopItem"));
+  items.forEach((item, idx) => {
+    const badge = item.querySelector(".stopBadge");
+    if (badge) badge.textContent = t("unloadN", idx + 1);
+  });
+}
+function makeStopItem(value = "") {
+  const wrap = document.createElement("div");
+  wrap.className = "stopItem";
+  wrap.draggable = true;
+
+  const handle = document.createElement("div");
+  handle.className = "handle";
+  handle.textContent = "≡";
+  handle.title = "Drag";
+
+  const meta = document.createElement("div");
+  meta.className = "stopMeta";
+
+  const badge = document.createElement("div");
+  badge.className = "stopBadge";
+  badge.textContent = t("unloadN", 1);
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "piem., Alūksne vai 56.99,24.12";
+  input.value = value;
+
+  meta.appendChild(badge);
+  meta.appendChild(input);
+
+  const del = document.createElement("button");
+  del.className = "danger";
+  del.textContent = "×";
+  del.title = t("deleteStop");
+  del.onclick = () => { wrap.remove(); refreshStopBadges(); };
+
+  wrap.appendChild(handle);
+  wrap.appendChild(meta);
+  wrap.appendChild(del);
+
+  wrap.addEventListener("dragstart", (e) => {
+    dragEl = wrap;
+    wrap.style.opacity = "0.6";
+    e.dataTransfer.effectAllowed = "move";
+  });
+  wrap.addEventListener("dragend", () => {
+    dragEl = null;
+    wrap.style.opacity = "1";
+    refreshStopBadges();
+  });
+  wrap.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    if (!dragEl || dragEl === wrap) return;
+    const rect = wrap.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    const parent = wrap.parentNode;
+    if (before) parent.insertBefore(dragEl, wrap);
+    else parent.insertBefore(dragEl, wrap.nextSibling);
+  });
+
+  return wrap;
+}
+function addStop(value = "") {
+  stopsDiv.appendChild(makeStopItem(value));
+  refreshStopBadges();
+}
+document.getElementById("addStop").onclick = () => addStop("");
+function getStops() {
+  return Array.from(stopsDiv.querySelectorAll(".stopItem input[type='text']"))
+    .map(i => i.value.trim())
+    .filter(Boolean);
+}
+
+/** =============================
+ * Modes / Params
+ * ============================= */
+function selectedModes() {
+  return Array.from(document.querySelectorAll("#modes input[type='checkbox']"))
+    .filter(c => c.checked)
+    .map(c => c.dataset.mode);
+}
+function readParams() {
+  return {
+    fuelCost: readNum("fuelCost", 0.12),
+    maxPortDetourKm: readNum("maxPortDetourKm", 250),
+    ferryCost: readNum("ferryCost", 0.20),
+    ferrySpeed: readNum("ferrySpeed", 35),
+    dailyRestH: readNum("dailyRestH", 11),
+    ferryRealism: !!document.getElementById("ferryRealism").checked,
+    showDebug: !!document.getElementById("showDebug").checked,
+    rules: {
+      breakAfterH: readNum("breakAfterH", 4.5),
+      breakLenMin: readNum("breakLenMin", 45),
+      dailyMaxH: readNum("dailyMaxH", 9),
+      dailyMaxExtH: readNum("dailyMaxExtH", 10),
+      weeklyMaxH: readNum("weeklyMaxH", 56),
+      fortnightMaxH: readNum("fortnightMaxH", 90)
+    },
+    truck: {
+      heightM: readNum("truckHeightM", 4.0),
+      weightT: readNum("truckWeightT", 40.0),
+      lengthM: readNum("truckLengthM", 16.5),
+      widthM: readNum("truckWidthM", 2.55),
+      adr: (document.getElementById("truckADR").value === "yes"),
+      euro: parseInt(document.getElementById("truckEuro").value, 10) || 6
+    },
+    showRestrictions: !!document.getElementById("showRestrictions").checked,
+    showPorts: !!document.getElementById("showPorts").checked
+  };
+}
+function readStartDate() {
+  const v = document.getElementById("startTime").value;
+  if (!v) return null;
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return null;
+  return d;
+}
+
+/** =============================
+ * HARD CONSTRAINTS (modeled)
+ * ============================= */
+const HARD_CONSTRAINTS = [
+  { id: "ORESUND", name: "Øresund crossing (DK–SE)", lat: 55.5667, lon: 12.8000, radiusKm: 8,  rules: { maxHeightM: 4.5, adrRestricted: true }, note: "Var būt ADR/īpašie noteikumi. Pārbaudi operatora noteikumus." },
+  { id: "STOREBAELT", name: "Great Belt crossing (DK)", lat: 55.3330, lon: 10.9900, radiusKm: 8, rules: { maxHeightM: 4.6 }, note: "Tilta/koridora noteikumi var atšķirties." },
+  { id: "MONTBLANC", name: "Mont Blanc Tunnel (FR–IT)", lat: 45.8326, lon: 6.8652, radiusKm: 10, rules: { adrRestricted: true, maxWeightT: 44 }, note: "Bieži ir ADR/klases ierobežojumi un laika logi." },
+  { id: "FREJUS", name: "Fréjus Tunnel (FR–IT)", lat: 45.1268, lon: 6.7005, radiusKm: 10, rules: { adrRestricted: true }, note: "Bieži ADR ierobežojumi." },
+  { id: "CHANNEL_TUNNEL", name: "Channel Tunnel area (FR–UK)", lat: 50.9500, lon: 1.8000, radiusKm: 12, rules: { adrRestricted: true, maxHeightM: 4.8 }, note: "Daļai ADR kravu var būt ierobežojumi / īpaša procedūra." }
+];
+
+
+function renderRestrictionOverlay(show) {
+  clearRestrictions();
+  if (!show) return;
+  for (const c of HARD_CONSTRAINTS) {
+    // yellow zone + triangle marker
+    drawCircle({ lat: c.lat, lon: c.lon }, c.radiusKm, {
+      color: "#fbbf24", weight: 2, opacity: 0.9, fillOpacity: 0.10
+    }, true);
+    drawRestrictionTriangle(
+      { lat: c.lat, lon: c.lon },
+      `<b>${c.name}</b><br/>${c.note || ""}`,
+      true
+    );
+  }
+}
+
+document.getElementById("showRestrictions").addEventListener("change", () => {
+  renderRestrictionOverlay(document.getElementById("showRestrictions").checked);
+  renderPorts(!!document.getElementById("showPorts").checked);
+});
+
+document.getElementById("showPorts").addEventListener("change", () => {
+  renderPorts(!!document.getElementById("showPorts").checked);
+});
+
+function sampleLineCoords(geojson, maxSamples = 140) {
+  const coords = geojson?.coordinates || [];
+  if (!coords.length) return [];
+  if (coords.length <= maxSamples) return coords.map(([lon, lat]) => ({ lat, lon }));
+  const step = Math.ceil(coords.length / maxSamples);
+  const out = [];
+  for (let i = 0; i < coords.length; i += step) {
+    const [lon, lat] = coords[i];
+    out.push({ lat, lon });
+  }
+  return out;
+}
+function checkConstraintsForRoadPart(roadGeojson, truck) {
+  const pts = sampleLineCoords(roadGeojson, 140);
+  const hits = [];
+
+  for (const c of HARD_CONSTRAINTS) {
+    let hit = false;
+    let nearestP = null;
+    let nearestD = Infinity;
+
+    for (const p of pts) {
+      const d = haversineKm({ lat: c.lat, lon: c.lon }, { lat: p.lat, lon: p.lon });
+      if (d < nearestD) { nearestD = d; nearestP = p; }
+      if (d <= (c.radiusKm ?? 8)) { hit = true; break; }
+    }
+    if (!hit) continue;
+
+    const r = c.rules || {};
+    const problems = [];
+    if (r.maxHeightM != null && truck.heightM > r.maxHeightM) problems.push(`height ${truck.heightM}m > ${r.maxHeightM}m`);
+    if (r.maxWeightT != null && truck.weightT > r.maxWeightT) problems.push(`weight ${truck.weightT}t > ${r.maxWeightT}t`);
+    if (r.adrRestricted && truck.adr) problems.push(`ADR restricted`);
+
+    hits.push({
+      id: c.id, name: c.name, note: c.note, problems,
+      zone: { lat: c.lat, lon: c.lon, radiusKm: c.radiusKm ?? 8 },
+      nearest: nearestP, nearestD
+    });
+  }
+
+  const byId = new Map();
+  for (const h of hits) if (!byId.has(h.id)) byId.set(h.id, h);
+  return Array.from(byId.values());
+}
+
+/** =============================
+ * Ports + Ferry graph
+ * ============================= */
+const PORTS = [
+  { id: "TAL", name: "Tallinn (EE)", lat: 59.4450, lon: 24.7536 },
+  { id: "HEL", name: "Helsinki (FI)", lat: 60.1680, lon: 24.9520 },
+  { id: "TUR", name: "Turku (FI)", lat: 60.4350, lon: 22.2250 },
+  { id: "STO", name: "Stockholm (SE)", lat: 59.3247, lon: 18.0920 },
+  { id: "NYN", name: "Nynäshamn (SE)", lat: 58.9030, lon: 17.9460 },
+
+  { id: "VEN", name: "Ventspils (LV)", lat: 57.3890, lon: 21.5600 },
+  { id: "LIE", name: "Liepāja (LV)", lat: 56.5110, lon: 21.0130 },
+  { id: "KLA", name: "Klaipėda (LT)", lat: 55.7030, lon: 21.1440 },
+
+  { id: "GDY", name: "Gdynia (PL)", lat: 54.5330, lon: 18.5400 },
+  { id: "SWI", name: "Świnoujście (PL)", lat: 53.9100, lon: 14.2500 },
+  { id: "GDN", name: "Gdańsk (PL)", lat: 54.3530, lon: 18.6570 },
+
+  { id: "KAR", name: "Karlskrona (SE)", lat: 56.1610, lon: 15.5860 },
+  { id: "KHM", name: "Karlshamn (SE)", lat: 56.1700, lon: 14.8620 },
+  { id: "TRE", name: "Trelleborg (SE)", lat: 55.3750, lon: 13.1570 },
+
+  { id: "TRM", name: "Travemünde (DE)", lat: 53.9560, lon: 10.8700 },
+  { id: "ROS", name: "Rostock (DE)", lat: 54.0920, lon: 12.1320 },
+  { id: "KIE", name: "Kiel (DE)", lat: 54.3230, lon: 10.1400 },
+
+  { id: "PUT", name: "Puttgarden (DE)", lat: 54.5000, lon: 11.2200 },
+  { id: "RBY", name: "Rødby (DK)", lat: 54.6560, lon: 11.3590 },
+  { id: "GED", name: "Gedser (DK)", lat: 54.5750, lon: 11.9260 },
+  { id: "FRE", name: "Frederikshavn (DK)", lat: 57.4400, lon: 10.5400 },
+  { id: "GOT", name: "Gothenburg (SE)", lat: 57.7089, lon: 11.9746 },
+
+  { id: "DVR", name: "Dover (UK)", lat: 51.1290, lon: 1.3080 },
+  { id: "CAL", name: "Calais (FR)", lat: 50.9580, lon: 1.8520 },
+  { id: "DNK", name: "Dunkirk (FR)", lat: 51.0460, lon: 2.3770 },
+  { id: "HAR", name: "Harwich (UK)", lat: 51.9360, lon: 1.2840 },
+  { id: "HVH", name: "Hoek van Holland (NL)", lat: 51.9770, lon: 4.1300 },
+
+  { id: "HOL", name: "Holyhead (UK)", lat: 53.3070, lon: -4.6320 },
+  { id: "DUB", name: "Dublin (IE)", lat: 53.3498, lon: -6.2603 },
+  { id: "BEL", name: "Belfast (UK)", lat: 54.6000, lon: -5.9330 },
+  { id: "CAI", name: "Cairnryan (UK)", lat: 54.9700, lon: -5.0300 },
+
+  { id: "BCN", name: "Barcelona (ES)", lat: 41.3520, lon: 2.1580 },
+  { id: "PAL", name: "Palma de Mallorca (ES)", lat: 39.5696, lon: 2.6502 },
+  { id: "IBZ", name: "Ibiza (ES)", lat: 38.9067, lon: 1.4206 },
+
+  { id: "ROM", name: "Civitavecchia (Rome) (IT)", lat: 42.0960, lon: 11.7960 },
+  { id: "ANC", name: "Ancona (IT)", lat: 43.6170, lon: 13.5180 },
+  { id: "VENI", name: "Venice (IT)", lat: 45.4408, lon: 12.3155 },
+
+  { id: "IGO", name: "Igoumenitsa (GR)", lat: 39.5030, lon: 20.2660 },
+  { id: "PAT", name: "Patras (GR)", lat: 38.2466, lon: 21.7346 },
+  { id: "ATH", name: "Piraeus (Athens) (GR)", lat: 37.9470, lon: 23.6370 }
+];
+
+
+function renderPorts(show = true) {
+  PORT_LAYER.clearLayers();
+  if (!show) {
+    if (map.hasLayer(PORT_LAYER)) map.removeLayer(PORT_LAYER);
+    return;
+  }
+  if (!map.hasLayer(PORT_LAYER)) PORT_LAYER.addTo(map);
+
+  for (const port of PORTS) {
+    drawPortMarker(port);
+  }
+}
+
+
+const FERRY_EDGES = [
+  { from: "TAL", to: "HEL" }, { from: "HEL", to: "TAL" },
+  { from: "HEL", to: "STO" }, { from: "STO", to: "HEL" },
+  { from: "TUR", to: "STO" }, { from: "STO", to: "TUR" },
+
+  { from: "NYN", to: "VEN" }, { from: "VEN", to: "NYN" },
+  { from: "TRM", to: "LIE" }, { from: "LIE", to: "TRM" },
+  { from: "GDY", to: "KAR" }, { from: "KAR", to: "GDY" },
+
+  { from: "TRM", to: "HEL" }, { from: "HEL", to: "TRM" },
+
+  { from: "TRM", to: "TRE" }, { from: "TRE", to: "TRM" },
+  { from: "ROS", to: "TRE" }, { from: "TRE", to: "ROS" },
+  { from: "SWI", to: "TRE" }, { from: "TRE", to: "SWI" },
+
+  { from: "KLA", to: "TRE" }, { from: "TRE", to: "KLA" },
+  { from: "KLA", to: "KHM" }, { from: "KHM", to: "KLA" },
+  { from: "KLA", to: "TRM" }, { from: "TRM", to: "KLA" },
+  { from: "KLA", to: "ROS" }, { from: "ROS", to: "KLA" },
+  { from: "TRM", to: "KHM" }, { from: "KHM", to: "TRM" },
+  { from: "ROS", to: "KHM" }, { from: "KHM", to: "ROS" },
+
+  { from: "PUT", to: "RBY" }, { from: "RBY", to: "PUT" },
+  { from: "ROS", to: "GED" }, { from: "GED", to: "ROS" },
+
+  { from: "FRE", to: "GOT" }, { from: "GOT", to: "FRE" },
+
+  { from: "DVR", to: "CAL" }, { from: "CAL", to: "DVR" },
+  { from: "DVR", to: "DNK" }, { from: "DNK", to: "DVR" },
+
+  { from: "HAR", to: "HVH" }, { from: "HVH", to: "HAR" },
+
+  { from: "DUB", to: "HOL" }, { from: "HOL", to: "DUB" },
+  { from: "BEL", to: "CAI" }, { from: "CAI", to: "BEL" },
+
+  { from: "BCN", to: "PAL" }, { from: "PAL", to: "BCN" },
+  { from: "BCN", to: "IBZ" }, { from: "IBZ", to: "BCN" },
+
+  { from: "ROM", to: "ATH" }, { from: "ATH", to: "ROM" },
+
+  { from: "ANC", to: "IGO" }, { from: "IGO", to: "ANC" },
+  { from: "ANC", to: "PAT" }, { from: "PAT", to: "ANC" },
+  { from: "VENI", to: "IGO" }, { from: "IGO", to: "VENI" },
+  { from: "VENI", to: "PAT" }, { from: "PAT", to: "VENI" }
+];
+
+function buildFerryGraph() {
+  const g = new Map();
+  const add = (a, b) => {
+    if (!g.has(a)) g.set(a, new Set());
+    g.get(a).add(b);
+  };
+  for (const e of FERRY_EDGES) add(e.from, e.to);
+  const out = new Map();
+  for (const [k, set] of g.entries()) out.set(k, Array.from(set));
+  return out;
+}
+function nearestPorts(p, limit = 6) {
+  return PORTS
+    .map(port => ({ port, d: haversineKm({ lat: port.lat, lon: port.lon }, { lat: p.lat, lon: p.lon }) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, limit);
+}
+
+/* FIX #2: aizliedzam “fake ferry” (startId === endId) -> tas radīja legs=[] un seaKm=0 kandidātus */
+function dijkstraFerryLegs(graph, startId, endId, ferrySpeed, ferryCostPerKm) {
+  if (!startId || !endId) return null;
+  if (startId === endId) return null; // <-- svarīgi: nav prāmja, tāpēc nav kandidāts
+
+  const dist = new Map();
+  const prev = new Map();
+  const used = new Set();
+
+  for (const port of PORTS) dist.set(port.id, Infinity);
+  dist.set(startId, 0);
+
+  while (true) {
+    let u = null, best = Infinity;
+    for (const [k, v] of dist.entries()) {
+      if (!used.has(k) && v < best) { best = v; u = k; }
+    }
+    if (u === null) break;
+    if (u === endId) break;
+    used.add(u);
+
+    for (const v of (graph.get(u) || [])) {
+      const A = PORTS.find(p => p.id === u);
+      const B = PORTS.find(p => p.id === v);
+      if (!A || !B) continue;
+
+      const km = haversineKm({ lat: A.lat, lon: A.lon }, { lat: B.lat, lon: B.lon });
+      const timeH = km / ferrySpeed;
+      const alt = dist.get(u) + timeH;
+
+      if (alt < (dist.get(v) ?? Infinity)) {
+        dist.set(v, alt);
+        prev.set(v, { from: u, km, timeH, cost: km * ferryCostPerKm });
+      }
+    }
+  }
+
+  if (!prev.has(endId)) return null;
+
+  const legs = [];
+  let cur = endId;
+  while (cur !== startId) {
+    const p = prev.get(cur);
+    if (!p) return null;
+    legs.push({ from: p.from, to: cur, km: p.km, timeH: p.timeH, cost: p.cost });
+    cur = p.from;
+  }
+  legs.reverse();
+  return legs;
+}
+
+/** =============================
+ * Ferry realism helpers
+ * ============================= */
+function homePortBonusEur(countryCode, portId) {
+  const cc = (countryCode || "").toLowerCase();
+  // NOTE: RIX nav PORTS listā; tas ir tikai preferences piemērs. Tas netraucē.
+  if (cc === "lv" && ["VEN", "LIE", "RIX", "KLA"].includes(portId)) return -80;
+  if (cc === "lt" && ["KLA"].includes(portId)) return -60;
+  if (cc === "ee" && ["TAL"].includes(portId)) return -40;
+  if (cc === "fi" && ["HEL", "TUR"].includes(portId)) return -40;
+  if (cc === "se" && ["TRE", "KAR", "KHM", "GOT", "STO", "NYN"].includes(portId)) return -40;
+  return 0;
+}
+
+/** =============================
+ * Compute routes
+ * ============================= */
+async function computeLandOnly(points, params) {
+  let landKm = 0;
+  let rawDriveH = 0;
+  const parts = [];
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const seg = await osrmRoute([points[i], points[i + 1]]);
+    landKm += seg.distanceKm;
+    rawDriveH += seg.durationHrs;
+    parts.push({ type: "road", geojson: seg.geojson });
+    await sleep(120);
+  }
+
+  const adj = drivingAdjustment(rawDriveH, params.rules);
+
+  const constraintHits = [];
+  for (const part of parts) constraintHits.push(...checkConstraintsForRoadPart(part.geojson, params.truck));
+  const byId = new Map();
+  for (const h of constraintHits) if (!byId.has(h.id)) byId.set(h.id, h);
+
+  const startDate = readStartDate();
+  const eta = computeEtaWithDailyRest(rawDriveH, adj.breaksH, 0, params.rules, params.dailyRestH, startDate);
+
+  return {
+    key: "LAND_ONLY",
+    name: t("mode_land"),
+    costEur: landKm * params.fuelCost,
+    totalH: eta.totalH,
+    landKm,
+    seaKm: 0,
+    landRawDriveH: rawDriveH,
+    breaksCount: adj.breaksCount,
+    breaksH: adj.breaksH,
+    restsCount: eta.restsCount,
+    restsH: eta.restsH,
+    landH: rawDriveH + adj.breaksH + eta.restsH,
+    seaH: 0,
+    etaStart: eta.start,
+    etaArrive: eta.arrive,
+    parts,
+    note: t("noteLand"),
+    warnings: adj.warnings,
+    constraintHits: Array.from(byId.values()),
+    debug: { kind: "land_only", segments: [] }
+  };
+}
+
+/* FIX #3: “veselais saprāts” īsiem posmiem — prāmi pat neapsveram */
+function shouldForceRoadOnlyForShortLeg(base, realism) {
+  if (!realism) return false;
+  if (!base) return false;
+  return (base.distanceKm < 450) || (base.durationHrs < 6);
+}
+
+function isCrossingSeaLikely(a, b) {
+  const seaPairs = [
+    ["lv", "se"], ["ee", "se"], ["fi", "se"],
+    ["se", "fi"], ["se", "no"],
+    ["dk", "se"], ["uk", "fr"], ["uk", "nl"]
+  ];
+  const ac = (a.countryCode || "").toLowerCase();
+  const bc = (b.countryCode || "").toLowerCase();
+  return seaPairs.some(([x, y]) => x === ac && y === bc);
+}
+
+async function computeLandFerry(points, params) {
+  const graph = buildFerryGraph();
+  const maxDetour = params.maxPortDetourKm ?? 250;
+  const realism = !!params.ferryRealism;
+
+  let landKm = 0, seaKm = 0;
+  let rawDriveH = 0, seaH = 0;
+  const parts = [];
+  const notes = [];
+  const debugSegments = [];
+
+  const thresholdMult = realism ? 1.15 : 1.35;
+  const maxLegs = realism ? 2 : 99;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const A = points[i], B = points[i + 1];
+    const base = await osrmRoute([A, B]);
+
+    const segDebug = {
+      seg: i + 1,
+      from: A.label, to: B.label,
+      fromCC: (A.countryCode || "").toUpperCase(),
+      toCC: (B.countryCode || "").toUpperCase(),
+      base: { km: base.distanceKm, hrs: base.durationHrs, cost: base.distanceKm * params.fuelCost },
+      realism,
+      thresholdMult,
+      maxLegs,
+      consideredPairs: 0,
+      evaluatedCandidates: 0,
+      topCandidates: [],
+      decision: "",
+      chosen: null
+    };
+
+    // FIX: īsiem posmiem ferry netiek apsvērts (piem., Göteborg–Oslo)
+    if (shouldForceRoadOnlyForShortLeg(base, realism)) {
+      landKm += base.distanceKm;
+      rawDriveH += base.durationHrs;
+      parts.push({ type: "road", geojson: base.geojson });
+      segDebug.decision = "too_short => road_only";
+      debugSegments.push(segDebug);
+      await sleep(120);
+      continue;
+    }
+
+    // same COUNTRY => road only (but different countries can still use ferries)
+    const FORCE_FERRY_COUNTRIES = new Set(["lv", "ee", "lt", "fi"]);
+    const FORCE_FERRY_TARGETS   = new Set(["se", "no", "dk"]);
+
+    const forceFerry =
+        FORCE_FERRY_COUNTRIES.has((A.countryCode || "").toLowerCase()) &&
+        FORCE_FERRY_TARGETS.has((B.countryCode || "").toLowerCase());
+
+    const nearA = nearestPorts(A, 6);
+    const nearB = nearestPorts(B, 6);
+    segDebug.nearA = nearA.map(x => ({ id: x.port.id, name: x.port.name, km: x.d }));
+    segDebug.nearB = nearB.map(x => ({ id: x.port.id, name: x.port.name, km: x.d }));
+
+    let best = null;
+    const candSummaries = [];
+
+    for (const pa of nearA) {
+      for (const pb of nearB) {
+        segDebug.consideredPairs++;
+
+        const legs = dijkstraFerryLegs(graph, pa.port.id, pb.port.id, params.ferrySpeed, params.ferryCost);
+        if (!legs) continue;
+
+        // FIX #1: drošībai — ja nav reālu prāmju posmu, izmetam ārā
+        if (legs.length === 0) continue;
+        if (legs.length > maxLegs) continue;
+
+        let r1, r2;
+        try {
+          r1 = await osrmRoute([A, pa.port]);
+          r2 = await osrmRoute([pb.port, B]);
+        } catch {
+          continue;
+        }
+
+        segDebug.evaluatedCandidates++;
+
+        const sKm = legs.reduce((s, l) => s + l.km, 0);
+        const sH = legs.reduce((s, l) => s + l.timeH, 0);
+        const sCost = legs.reduce((s, l) => s + l.cost, 0);
+
+        // FIX #1: ja jūras nav (vai ir praktiski 0), nav kandidāts
+        if (sKm <= 1) continue;
+
+        const lKm = r1.distanceKm + r2.distanceKm;
+        const lH = r1.durationHrs + r2.durationHrs;
+
+        const detPenaltyKm = Math.max(0, pa.d - maxDetour) + Math.max(0, pb.d - maxDetour);
+        const detPenaltyEur = (detPenaltyKm * params.fuelCost * 0.25);
+        const lCost = (lKm * params.fuelCost) + detPenaltyEur;
+
+        const transfers = Math.max(0, legs.length - 1);
+        const transferPenaltyEur = transfers * (realism ? 60 : 30);
+        const transferPenaltyH = transfers * (realism ? 1.25 : 1.0);
+
+        const directBonusEur = (realism && legs.length === 1) ? -120 : 0;
+        const homeBonusEur = realism
+          ? (homePortBonusEur(A.countryCode, pa.port.id) + homePortBonusEur(B.countryCode, pb.port.id))
+          : 0;
+
+        // FIX #1: bonusi nedrīkst “apgāzt” cenu (cap uz 30% no pamata izmaksām)
+        const rawCostNoBonuses = lCost + sCost + transferPenaltyEur;
+        let bonusTotal = directBonusEur + homeBonusEur;
+        const maxBonus = -0.30 * rawCostNoBonuses; // negatīvs = atlaide
+        if (bonusTotal < maxBonus) bonusTotal = maxBonus;
+
+        const candCost = rawCostNoBonuses + bonusTotal;
+        const candTimeH = lH + sH + transferPenaltyH;
+        const legStr = legs.map(l => `${l.from}->${l.to}`).join(" | ");
+
+        candSummaries.push({
+          fromPort: pa.port.id, toPort: pb.port.id,
+          transfers,
+          landKm: lKm, seaKm: sKm,
+          costEur: candCost,
+          timeH: candTimeH,
+          bonuses: { directBonusEur, homeBonusEur, bonusCappedToEur: bonusTotal },
+          penalties: { detPenaltyEur, transferPenaltyEur, transferPenaltyH },
+          legs: legStr
+        });
+
+        const cand = {
+          pa: pa.port, pb: pb.port, legs, r1, r2,
+          lKm, lH, sKm, sH, transfers,
+          candCost, candTimeH,
+          detPenaltyEur, transferPenaltyEur, transferPenaltyH,
+          directBonusEur, homeBonusEur,
+          bonusTotal,
+          legStr
+        };
+
+        if (!best || cand.candCost < best.candCost) best = cand;
+        await sleep(30);
+      }
+    }
+
+    candSummaries.sort((a, b) => a.costEur - b.costEur);
+    segDebug.topCandidates = candSummaries.slice(0, 6);
+
+    if (!best) {
+      landKm += base.distanceKm;
+      rawDriveH += base.durationHrs;
+      parts.push({ type: "road", geojson: base.geojson });
+      notes.push(`Seg ${i + 1}: no ferry path → road only`);
+      segDebug.decision = "no_ferry_path => road_only";
+      debugSegments.push(segDebug);
+      await sleep(120);
+      continue;
+    }
+
+    // FIX: pareizi pielietojam “seaLikely” slieksni (tev agrāk threshold tika aprēķināts, bet netika izmantots)
+    const seaLikely = isCrossingSeaLikely(A, B);
+    const threshold = seaLikely ? (thresholdMult * 1.8) : thresholdMult;
+
+    const baseCost = base.distanceKm * params.fuelCost;
+    if (!forceFerry && best.candCost > baseCost * threshold) {
+      landKm += base.distanceKm;
+      rawDriveH += base.durationHrs;
+      parts.push({ type: "road", geojson: base.geojson });
+      segDebug.decision = "ferry_not_beneficial => road_only";
+      debugSegments.push(segDebug);
+      await sleep(120);
+      continue;
+    }
+
+    // choose ferry
+    landKm += best.lKm;
+    rawDriveH += best.lH;
+    seaKm += best.sKm;
+    seaH += (best.sH + best.transferPenaltyH);
+
+    parts.push({ type: "road", geojson: best.r1.geojson });
+    for (const leg of best.legs) {
+      const from = PORTS.find(p => p.id === leg.from);
+      const to = PORTS.find(p => p.id === leg.to);
+      if (from && to) parts.push({ type: "ferry", from, to, meta: leg });
+    }
+    parts.push({ type: "road", geojson: best.r2.geojson });
+
+    notes.push(`Seg ${i + 1}: ${best.pa.name} → ${best.pb.name}${best.transfers ? ` (+${best.transfers} transfers)` : ``}`);
+    segDebug.decision = "ferry_selected";
+    segDebug.chosen = {
+      fromPort: best.pa.id,
+      toPort: best.pb.id,
+      legs: best.legStr,
+      transfers: best.transfers,
+      totals: { costEur: best.candCost, timeH: best.candTimeH }
+    };
+    debugSegments.push(segDebug);
+
+    await sleep(120);
+  }
+
+  const adj = drivingAdjustment(rawDriveH, params.rules);
+
+  const constraintHits = [];
+  for (const part of parts) {
+    if (part.type === "road") constraintHits.push(...checkConstraintsForRoadPart(part.geojson, params.truck));
+  }
+  const byId = new Map();
+  for (const h of constraintHits) if (!byId.has(h.id)) byId.set(h.id, h);
+
+  const startDate = readStartDate();
+  const eta = computeEtaWithDailyRest(rawDriveH, adj.breaksH, seaH, params.rules, params.dailyRestH, startDate);
+
+  return {
+    key: "LAND_FERRY",
+    name: t("mode_ferry"),
+    costEur: (landKm * params.fuelCost) + (seaKm * params.ferryCost),
+    totalH: eta.totalH,
+    landKm, seaKm,
+    landRawDriveH: rawDriveH,
+    breaksCount: adj.breaksCount,
+    breaksH: adj.breaksH,
+    restsCount: eta.restsCount,
+    restsH: eta.restsH,
+    landH: rawDriveH + adj.breaksH + eta.restsH,
+    seaH,
+    etaStart: eta.start,
+    etaArrive: eta.arrive,
+    parts,
+    note: `${t("noteFerry")} ${notes.join(" | ")}`,
+    warnings: adj.warnings,
+    constraintHits: Array.from(byId.values()),
+    debug: { kind: "land_ferry", realism, thresholdMult, maxLegs, segments: debugSegments }
+  };
+}
+
+/** =============================
+ * Compare
+ * ============================= */
+const compareSet = new Set();
+function makeRouteId(r, idx) {
+  return `${r.key}__${idx}__${Math.round(r.costEur)}__${Math.round(r.totalH * 10)}`;
+}
+function renderCompareBox(allRoutes) {
+  const box = document.getElementById("compareBox");
+  const wrap = document.getElementById("compareTableWrap");
+  const picked = allRoutes.filter(r => compareSet.has(r.__id));
+  if (!picked.length) {
+    box.style.display = "none";
+    wrap.innerHTML = "";
+    return;
+  }
+  box.style.display = "block";
+
+  const rows = picked.map(r => `
+    <tr>
+      <td><b>${r.name}</b></td>
+      <td>${fmtEur(r.costEur)}</td>
+      <td>${fmtHrs(r.totalH)}</td>
+      <td>${fmtKm(r.landKm + r.seaKm)}</td>
+      <td>${fmtKm(r.landKm)} / ${fmtKm(r.seaKm)}</td>
+      <td>${r.etaArrive ? fmtHumanDate(r.etaArrive) : "-"}</td>
+      <td>${(r.constraintHits?.length || 0)}</td>
+    </tr>
+  `).join("");
+
+  wrap.innerHTML = `
+    <table class="compareTable">
+      <thead>
+        <tr>
+          <th>Route</th>
+          <th>${t("price")}</th>
+          <th>${t("time")}</th>
+          <th>${t("dist")}</th>
+          <th>${t("landSplit")} / ${t("seaSplit")}</th>
+          <th>${t("etaLabel")}</th>
+          <th>Constraints</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+document.getElementById("clearCompareBtn").onclick = () => {
+  compareSet.clear();
+  if (window.__lastRoutes) renderCompareBox(window.__lastRoutes);
+};
+
+/** =============================
+ * Debug panel
+ * ============================= */
+function setDebugVisible(show) {
+  document.getElementById("debugBox").style.display = show ? "block" : "none";
+}
+function setDebugText(obj) {
+  document.getElementById("debugText").textContent = obj ? JSON.stringify(obj, null, 2) : "";
+}
+function ensureDebugVisibilityFromToggle() {
+  setDebugVisible(!!document.getElementById("showDebug").checked);
+}
+document.getElementById("showDebug").addEventListener("change", ensureDebugVisibilityFromToggle);
+document.getElementById("debugHideBtn").addEventListener("click", () => {
+  document.getElementById("showDebug").checked = false;
+  ensureDebugVisibilityFromToggle();
+});
+document.getElementById("debugCopyBtn").addEventListener("click", async () => {
+  const text = document.getElementById("debugText").textContent || "";
+  await copyToClipboard(text);
+});
+
+/** =============================
+ * Render results + map display
+ * ============================= */
+
+function drawConstraintHitsOnMap(constraintHits) {
+  if (!constraintHits?.length) return;
+  for (const h of constraintHits) {
+    drawCircle({ lat: h.zone.lat, lon: h.zone.lon }, h.zone.radiusKm, {
+      color: "#fbbf24", weight: 3, opacity: 0.95, fillOpacity: 0.14
+    }, false);
+
+    if (h.nearest) {
+      const layer = L.polyline([[h.nearest.lat, h.nearest.lon], [h.zone.lat, h.zone.lon]], {
+        color: "#fbbf24", weight: 3, opacity: 0.9, dashArray: "6 6"
+      }).addTo(map);
+      drawnLayers.push(layer);
+    }
+
+    const prob = (h.problems?.length ? `<br/><b>⚠</b> ${h.problems.join("; ")}` : "");
+    drawRestrictionTriangle(
+      { lat: h.zone.lat, lon: h.zone.lon },
+      `<b>${h.name}</b>${prob}<br/>${h.note || ""}`,
+      false
+    );
+  }
+}
+
+
+function renderResults(routes) {
+  const resDiv = document.getElementById("results");
+  resDiv.innerHTML = "";
+
+  if (!routes.length) {
+    resDiv.innerHTML = `<div class="card"><div class="small">${t("statusNoModes")}</div></div>`;
+    return;
+  }
+
+  let cheapest = routes[0], fastest = routes[0], shortest = routes[0];
+  for (const r of routes) {
+    if (r.costEur < cheapest.costEur) cheapest = r;
+    if (r.totalH < fastest.totalH) fastest = r;
+    if ((r.landKm + r.seaKm) < (shortest.landKm + shortest.seaKm)) shortest = r;
+  }
+
+  routes.forEach((r, idx) => {
+    r.__id = makeRouteId(r, idx);
+
+    const card = document.createElement("div");
+    card.className = "card";
+    if (r === cheapest) card.classList.add("highlightCheap");
+    if (r === fastest) card.classList.add("highlightFast");
+    if (r === shortest) card.classList.add("highlightShort");
+
+    const badges = [];
+    if (r === cheapest) badges.push(t("cheapest"));
+    if (r === fastest) badges.push(t("fastest"));
+    if (r === shortest) badges.push(t("shortest"));
+
+    const warnLines = [];
+    if (r.warnings?.includes("daily")) warnLines.push(`• ${t("wDaily")}`);
+    if (r.warnings?.includes("weekly")) warnLines.push(`• ${t("wWeekly")}`);
+    if (r.warnings?.includes("fortnight")) warnLines.push(`• ${t("wFortnight")}`);
+
+    const constraintBlock = (r.constraintHits?.length)
+      ? `<div class="warn"><b>${t("restrictionsHitTitle")}:</b><br/>${r.constraintHits.map(h => {
+          const p = h.problems?.length ? ` — <i>${h.problems.join("; ")}</i>` : "";
+          return `• ${h.name}${p}`;
+        }).join("<br/>")}</div>`
+      : "";
+
+    const etaBlock = (r.etaStart && r.etaArrive)
+      ? `<div class="warnY"><b>${t("etaLabel")}:</b><br/>
+          ${t("startAt")}: ${fmtHumanDate(r.etaStart)}<br/>
+          ${t("arriveAt")}: ${fmtHumanDate(r.etaArrive)}<br/>
+          ${t("restTitle")}: ${r.restsCount} × ${document.getElementById("dailyRestH").value}h (${fmtHrs(r.restsH)})</div>`
+      : "";
+
+    const checked = compareSet.has(r.__id) ? "checked" : "";
+
+    card.innerHTML = `
+      <div class="cardHeader">
+        <div class="title">${r.name}</div>
+        <div>${badges.map(b => `<span class="badge">${b}</span>`).join(" ")}</div>
+      </div>
+
+      <div class="metrics">
+        <div class="metric"><div class="k">${t("price")}</div><div class="v">${fmtEur(r.costEur)}</div></div>
+        <div class="metric"><div class="k">${t("time")}</div><div class="v">${fmtHrs(r.totalH)}</div></div>
+        <div class="metric"><div class="k">${t("dist")}</div><div class="v">${fmtKm(r.landKm + r.seaKm)}</div></div>
+      </div>
+
+      <div class="split">
+        <div class="metric">
+          <div class="k">${t("landSplit")}</div>
+          <div class="v">${fmtKm(r.landKm)} • ${fmtHrs(r.landH)}</div>
+        </div>
+        <div class="metric">
+          <div class="k">${t("seaSplit")}</div>
+          <div class="v">${fmtKm(r.seaKm)} • ${fmtHrs(r.seaH)}</div>
+        </div>
+      </div>
+
+      <div class="small">${r.note || ""}</div>
+      <div class="small">Breaks: ${r.breaksCount} × ${document.getElementById("breakLenMin").value} min (total ${fmtHrs(r.breaksH)})</div>
+
+      ${warnLines.length ? `<div class="warnY"><b>${t("warnings")}:</b><br/>${warnLines.join("<br/>")}</div>` : ""}
+      ${constraintBlock}
+      ${etaBlock}
+
+      <div class="btns">
+        <button class="primary" data-act="show">${t("showOnMap")}</button>
+        <button class="ghost" data-act="debug">${t("showDebugBtn")}</button>
+        <label class="chip" style="margin:0;">
+          <input type="checkbox" data-act="cmp" ${checked} />
+          <span>${t("comparePick")}</span>
+        </label>
+      </div>
+    `;
+
+    card.querySelector('[data-act="show"]').onclick = () => {
+      clearMap();
+      renderRestrictionOverlay(document.getElementById("showRestrictions").checked);
+  renderPorts(!!document.getElementById("showPorts").checked);
+      renderPorts(!!document.getElementById("showPorts").checked);
+
+      if (window.__lastPoints) {
+        window.__lastPoints.forEach((p, idx) => {
+          const role = (idx === 0) ? "start" : (idx === window.__lastPoints.length - 1 ? "end" : "stop");
+          const n = (role === "stop") ? idx : null;
+          drawWaypointMarker(
+            p,
+            role,
+            n,
+            `<b>${p.label}</b>${p.countryCode ? ` (${p.countryCode.toUpperCase()})` : ""}`
+          );
+        });
+      }
+      for (const part of r.parts) {
+        if (part.type === "road") drawGeoJsonLine(part.geojson, { weight: 5, opacity: 0.9 });
+        if (part.type === "ferry") drawStraightLine(part.from, part.to, { weight: 4, opacity: 0.85, dashArray: "8 8" });
+      }
+      drawConstraintHitsOnMap(r.constraintHits);
+
+      try {
+        const grp = L.featureGroup(drawnLayers.concat(restrictionLayers));
+        map.fitBounds(grp.getBounds().pad(0.15), { maxZoom: 10 });
+      } catch {}
+    };
+
+    card.querySelector('[data-act="debug"]').onclick = () => {
+      document.getElementById("showDebug").checked = true;
+      ensureDebugVisibilityFromToggle();
+      setDebugText({
+        route: { key: r.key, name: r.name, costEur: r.costEur, totalH: r.totalH, landKm: r.landKm, seaKm: r.seaKm },
+        params: readParams(),
+        debug: r.debug || null
+      });
+      try { document.getElementById("debugBox").scrollIntoView({ behavior: "smooth", block: "start" }); } catch {}
+    };
+
+    card.querySelector('[data-act="cmp"]').addEventListener("change", (e) => {
+      if (e.target.checked) compareSet.add(r.__id);
+      else compareSet.delete(r.__id);
+      renderCompareBox(routes);
+    });
+
+    resDiv.appendChild(card);
+  });
+
+  renderCompareBox(routes);
+}
+
+/** =============================
+ * Share link + load from URL
+ * ============================= */
+function buildShareUrl() {
+  const params = readParams();
+  const qs = new URLSearchParams();
+  qs.set("lang", LANG);
+  qs.set("start", document.getElementById("start").value.trim());
+  qs.set("end", document.getElementById("end").value.trim());
+  for (const s of getStops()) qs.append("stop", s);
+
+  qs.set("fuelCost", String(params.fuelCost));
+  qs.set("maxPortDetourKm", String(params.maxPortDetourKm));
+  qs.set("ferryCost", String(params.ferryCost));
+  qs.set("ferrySpeed", String(params.ferrySpeed));
+
+  qs.set("breakAfterH", String(params.rules.breakAfterH));
+  qs.set("breakLenMin", String(params.rules.breakLenMin));
+  qs.set("dailyMaxH", String(params.rules.dailyMaxH));
+  qs.set("dailyMaxExtH", String(params.rules.dailyMaxExtH));
+  qs.set("weeklyMaxH", String(params.rules.weeklyMaxH));
+  qs.set("fortnightMaxH", String(params.rules.fortnightMaxH));
+
+  qs.set("dailyRestH", String(params.dailyRestH));
+  qs.set("startTime", safeStr(document.getElementById("startTime").value));
+
+  qs.set("truckHeightM", String(params.truck.heightM));
+  qs.set("truckWeightT", String(params.truck.weightT));
+  qs.set("truckLengthM", String(params.truck.lengthM));
+  qs.set("truckWidthM", String(params.truck.widthM));
+  qs.set("truckADR", params.truck.adr ? "yes" : "no");
+  qs.set("truckEuro", String(params.truck.euro));
+
+  for (const m of selectedModes()) qs.append("mode", m);
+
+  qs.set("showRestrictions", document.getElementById("showRestrictions").checked ? "1" : "0");
+  qs.set("showPorts", document.getElementById("showPorts").checked ? "1" : "0");
+  qs.set("ferryRealism", document.getElementById("ferryRealism").checked ? "1" : "0");
+  qs.set("showDebug", document.getElementById("showDebug").checked ? "1" : "0");
+
+  const url = new URL(window.location.href);
+  url.search = qs.toString();
+  return url.toString();
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus(t("copied"));
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+    setStatus(t("copied"));
+  }
+}
+document.getElementById("shareBtn").onclick = async () => {
+  const url = buildShareUrl();
+  await copyToClipboard(url);
+};
+
+function loadFromUrl() {
+  const qs = new URLSearchParams(window.location.search);
+  const lang = qs.get("lang");
+  if (lang && I18N[lang]) LANG = lang;
+
+  const start = qs.get("start"); if (start) document.getElementById("start").value = start;
+  const end = qs.get("end"); if (end) document.getElementById("end").value = end;
+
+  const stops = qs.getAll("stop");
+  if (stops.length) {
+    stopsDiv.innerHTML = "";
+    for (const s of stops) addStop(s);
+  }
+
+  const setIf = (id, key) => {
+    const v = qs.get(key);
+    if (v != null && v !== "") document.getElementById(id).value = v;
+  };
+
+  setIf("fuelCost", "fuelCost");
+  setIf("maxPortDetourKm", "maxPortDetourKm");
+  setIf("ferryCost", "ferryCost");
+  setIf("ferrySpeed", "ferrySpeed");
+
+  setIf("breakAfterH", "breakAfterH");
+  setIf("breakLenMin", "breakLenMin");
+  setIf("dailyMaxH", "dailyMaxH");
+  setIf("dailyMaxExtH", "dailyMaxExtH");
+  setIf("weeklyMaxH", "weeklyMaxH");
+  setIf("fortnightMaxH", "fortnightMaxH");
+
+  setIf("dailyRestH", "dailyRestH");
+  const st = qs.get("startTime"); if (st) document.getElementById("startTime").value = st;
+
+  setIf("truckHeightM", "truckHeightM");
+  setIf("truckWeightT", "truckWeightT");
+  setIf("truckLengthM", "truckLengthM");
+  setIf("truckWidthM", "truckWidthM");
+  const adr = qs.get("truckADR"); if (adr) document.getElementById("truckADR").value = adr;
+  const euro = qs.get("truckEuro"); if (euro) document.getElementById("truckEuro").value = euro;
+
+  const showR = qs.get("showRestrictions");
+  if (showR != null) document.getElementById("showRestrictions").checked = (showR === "1");
+
+  const showP = qs.get("showPorts");
+  if (showP != null) document.getElementById("showPorts").checked = (showP === "1");
+
+  const fr = qs.get("ferryRealism");
+  if (fr != null) document.getElementById("ferryRealism").checked = (fr === "1");
+  const sd = qs.get("showDebug");
+  if (sd != null) document.getElementById("showDebug").checked = (sd === "1");
+
+  const modeList = qs.getAll("mode");
+  if (modeList.length) {
+    for (const c of document.querySelectorAll("#modes input[type='checkbox']")) {
+      c.checked = modeList.includes(c.dataset.mode);
+    }
+  }
+
+  applyI18n();
+  renderRestrictionOverlay(document.getElementById("showRestrictions").checked);
+  renderPorts(!!document.getElementById("showPorts").checked);
+  ensureDebugVisibilityFromToggle();
+}
+
+/** =============================
+ * Main actions
+ * ============================= */
+document.getElementById("clear").onclick = () => {
+  clearMap();
+  renderRestrictionOverlay(document.getElementById("showRestrictions").checked);
+  renderPorts(!!document.getElementById("showPorts").checked);
+  setStatus("OK");
+  document.getElementById("results").innerHTML = "";
+  compareSet.clear();
+  document.getElementById("compareBox").style.display = "none";
+  setDebugText(null);
+};
+
+document.getElementById("lang").addEventListener("change", (e) => {
+  LANG = e.target.value;
+  applyI18n();
+});
+
+document.getElementById("calc").onclick = async () => {
+  const startQ = document.getElementById("start").value.trim();
+  const endQ = document.getElementById("end").value.trim();
+  const stops = getStops();
+  const modes = selectedModes();
+
+  if (!modes.length) { setStatus(t("statusNoModes")); renderResults([]); return; }
+  if (!startQ || !endQ) { setStatus(t("statusNeedStartEnd")); return; }
+
+  const params = readParams();
+
+  setStatus(t("statusGeocode"));
+  try {
+    clearMap();
+    renderRestrictionOverlay(params.showRestrictions);
+    renderPorts(params.showPorts);
+
+    const queries = [startQ, ...stops, endQ];
+    const points = [];
+    for (const q of queries) {
+      const p = await geocode(q);
+      points.push({ ...p, label: q });
+      await sleep(160);
+    }
+    window.__lastPoints = points;
+
+    points.forEach((p, idx) => {
+      const role = (idx === 0) ? "start" : (idx === points.length - 1 ? "end" : "stop");
+      const n = (role === "stop") ? idx : null;
+      drawWaypointMarker(
+        p,
+        role,
+        n,
+        `<b>${p.label}</b>${p.countryCode ? ` (${p.countryCode.toUpperCase()})` : ""}`
+      );
+    });
+
+    try {
+      const grp = L.featureGroup(drawnLayers.concat(restrictionLayers));
+      map.fitBounds(grp.getBounds().pad(0.15), { maxZoom: 7 });
+    } catch {}
+
+    setStatus(t("statusCompute"));
+
+    const routes = [];
+    for (const mode of modes) {
+      if (mode === "LAND_ONLY") routes.push(await computeLandOnly(points, params));
+      if (mode === "LAND_FERRY") routes.push(await computeLandFerry(points, params));
+      await sleep(120);
+    }
+
+    routes.sort((a, b) => a.costEur - b.costEur);
+    window.__lastRoutes = routes;
+    compareSet.clear();
+    renderResults(routes);
+    setStatus(t("statusReady"));
+
+    if (document.getElementById("showDebug").checked) {
+      setDebugText({
+        info: "Calculated routes",
+        params,
+        routes: routes.map(r => ({ key: r.key, name: r.name, costEur: r.costEur, totalH: r.totalH, landKm: r.landKm, seaKm: r.seaKm }))
+      });
+    }
+  } catch (e) {
+    setStatus(`Kļūda: ${e.message}`);
+  }
+};
+
+/** =============================
+ * Init defaults
+ * ============================= */
+(function init() {
+  const now = new Date();
+  document.getElementById("startTime").value = fmtDateTimeLocal(now);
+
+  if (!getStops().length) addStop("");
+
+  loadFromUrl();
+  applyI18n();
+  renderPorts(true);
+  updatePinHint();
+  renderRestrictionOverlay(document.getElementById("showRestrictions").checked);
+  renderPorts(!!document.getElementById("showPorts").checked);
+  ensureDebugVisibilityFromToggle();
+})();
+</script>
+</body>
+</html>
